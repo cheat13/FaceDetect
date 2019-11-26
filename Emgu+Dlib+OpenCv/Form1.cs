@@ -34,6 +34,10 @@ namespace Emgu_Dlib_OpenCv
         private int timeset;
         private int countdown;
 
+        private Size size;
+        private Point point;
+        private Rect rect;
+
         public Form1()
         {
             InitializeComponent();
@@ -49,12 +53,17 @@ namespace Emgu_Dlib_OpenCv
             this.checker = new int[3] { -10, 10, 0 };
             this.text = new string[4] { "Chin down", "Chin up", "Look straight", "Hold still" };
             this.timeset = 3;
+            this.size = new Size(250, 300);
             SetStart();
         }
 
         private void Timer1_Tick(object sender, EventArgs e)
         {
             capture.Read(frame);
+
+            this.point = new Point((frame.Width - size.Width) / 2, (frame.Height - size.Height) / 2);
+            this.rect = new Rect(point, size);
+
             Cv2.Flip(frame, frame, FlipMode.Y);
 
             if (!frame.Empty() && start)
@@ -63,57 +72,62 @@ namespace Emgu_Dlib_OpenCv
 
                 var faces = fd.Operator(img);
 
-                if (faces.Count() == 1)
+                if (faces.Any(face => IsFaceInFrame(face)))
                 {
-                    var face = faces.First();
-
-                    var shape = sp.Detect(img, face);
-
-                    var landmarks = new MatOfPoint2d(1, 6,
-                        (from i in new int[] { 30, 8, 36, 45, 48, 54 }
-                         let pt = shape.GetPart((uint)i)
-                         select new OpenCvSharp.Point2d(pt.X, pt.Y)).ToArray());
-
-                    var cameraMatrix = Utility.GetCameraMatrix((int)img.Rect.Width, (int)img.Rect.Height);
-
-                    Mat rotation = new MatOfDouble();
-                    Mat translation = new MatOfDouble();
-                    Cv2.SolvePnP(model, landmarks, cameraMatrix, coeffs, rotation, translation);
-
-                    var euler = Utility.GetEulerMatrix(rotation);
-
-                    var yaw = 180 * euler.At<double>(0, 2) / Math.PI;
-                    var pitch = 180 * euler.At<double>(0, 1) / Math.PI;
-                    pitch = Math.Sign(pitch) * 180 - pitch;
-
-                    Cv2.ProjectPoints(poseModel, rotation, translation, cameraMatrix, coeffs, poseProjection);
-
-                    var landmark = landmarks.At<Point2d>(0);
-                    var p = poseProjection.At<Point2d>(0);
-                    Dlib.DrawLine(
-                        img,
-                        new DlibDotNet.Point((int)landmark.X, (int)landmark.Y),
-                        new DlibDotNet.Point((int)p.X, (int)p.Y),
-                        color: new RgbPixel(0, 255, 255));
-
-                    //foreach (var i in new int[] { 30, 8, 36, 45, 48, 54 })
-                    //{
-                    //    var point = shape.GetPart((uint)i);
-                    //    var rect = new Rectangle(point);
-                    //    Dlib.DrawRectangle(img, rect, color: new RgbPixel(255, 255, 0), thickness: 4);
-                    //}
-                    for (var i = 0; i < shape.Parts; i++)
+                    foreach (var face in faces)
                     {
-                        var point = shape.GetPart((uint)i);
-                        var rect = new Rectangle(point);
-                        Dlib.DrawRectangle(img, rect, color: new RgbPixel(0, 255, 255), thickness: 4);
+                        if (IsFaceInFrame(face))
+                        {
+                            //Dlib.DrawRectangle(img, face, color: new RgbPixel(0, 255, 255), thickness: 4);
+                            var shape = sp.Detect(img, face);
+
+                            var landmarks = new MatOfPoint2d(1, 6,
+                                (from i in new int[] { 30, 8, 36, 45, 48, 54 }
+                                 let pt = shape.GetPart((uint)i)
+                                 select new OpenCvSharp.Point2d(pt.X, pt.Y)).ToArray());
+
+                            var cameraMatrix = Utility.GetCameraMatrix((int)img.Rect.Width, (int)img.Rect.Height);
+
+                            Mat rotation = new MatOfDouble();
+                            Mat translation = new MatOfDouble();
+                            Cv2.SolvePnP(model, landmarks, cameraMatrix, coeffs, rotation, translation);
+
+                            var euler = Utility.GetEulerMatrix(rotation);
+
+                            var yaw = 180 * euler.At<double>(0, 2) / Math.PI;
+                            var pitch = 180 * euler.At<double>(0, 1) / Math.PI;
+                            pitch = Math.Sign(pitch) * 180 - pitch;
+
+                            Cv2.ProjectPoints(poseModel, rotation, translation, cameraMatrix, coeffs, poseProjection);
+
+                            //var landmark = landmarks.At<Point2d>(0);
+                            //var p = poseProjection.At<Point2d>(0);
+                            //Dlib.DrawLine(
+                            //    img,
+                            //    new DlibDotNet.Point((int)landmark.X, (int)landmark.Y),
+                            //    new DlibDotNet.Point((int)p.X, (int)p.Y),
+                            //    color: new RgbPixel(0, 255, 255));
+
+                            //foreach (var i in new int[] { 30, 8, 36, 45, 48, 54 })
+                            //{
+                            //    var point = shape.GetPart((uint)i);
+                            //    var rect = new Rectangle(point);
+                            //    Dlib.DrawRectangle(img, rect, color: new RgbPixel(255, 255, 0), thickness: 4);
+                            //}
+                            for (var i = 0; i < shape.Parts; i++)
+                            {
+                                var point = shape.GetPart((uint)i);
+                                var rect = new Rectangle(point);
+                                Dlib.DrawRectangle(img, rect, color: new RgbPixel(0, 255, 255), thickness: 4);
+                            }
+
+                            CheckFace(pitch, frame, yaw, pitch);
+                            frame = img.ToBitmap().ToMat();
+
+                            Cv2.PutText(frame, this.text[step], new Point(face.Right, face.Center.Y), HersheyFonts.HersheySimplex, 1, Scalar.BlueViolet, thickness: 2);
+                            CountDown(face);
+                        }
                     }
-
-                    CheckFace(pitch, frame, yaw, pitch);
-                    frame = img.ToBitmap().ToMat();
-
-                    Cv2.PutText(frame, this.text[step], new Point(face.Right, face.Center.Y), HersheyFonts.HersheySimplex, 1, Scalar.BlueViolet, thickness: 2);
-                    CountDown(face);
                 }
                 else
                 {
@@ -121,6 +135,7 @@ namespace Emgu_Dlib_OpenCv
                 }
             }
 
+            Cv2.Rectangle(frame, rect, Scalar.Yellow, thickness: 2);
             camera.Image = frame.ToBitmap();
         }
 
@@ -154,6 +169,15 @@ namespace Emgu_Dlib_OpenCv
             this.countdown = 3;
             this.stopwatch = new Stopwatch();
             this.stopwatch.Stop();
+        }
+
+        private bool IsFaceInFrame(Rectangle face)
+        {
+
+            var percent = (double)(face.Area) / (this.size.Width * this.size.Height);
+            return this.rect.Left < face.Center.X && face.Center.X < this.rect.Right &&
+            this.rect.Top < face.Center.Y && face.Center.Y < this.rect.Bottom &&
+            Math.Abs(1 - percent) < 0.5;
         }
 
         private void CheckFace(double picth, Mat frame, double yaw, double pitch)
@@ -191,7 +215,7 @@ namespace Emgu_Dlib_OpenCv
 
         private bool IsForntFace(double yaw, double pitch)
         {
-            return Math.Abs(yaw) <= 15 && Math.Abs(pitch) <= 10;
+            return Math.Abs(yaw) <= 15 && Math.Abs(pitch) <= 15;
         }
     }
 }
