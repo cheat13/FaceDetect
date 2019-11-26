@@ -50,8 +50,8 @@ namespace Emgu_Dlib_OpenCv
             this.coeffs.SetTo(0);
             this.poseModel = new MatOfPoint3d(1, 1, new Point3d(0, 0, 1000));
             this.poseProjection = new MatOfPoint2d();
-            this.checker = new int[3] { -10, 10, 0 };
-            this.text = new string[4] { "Chin down", "Chin up", "Look straight", "Hold still" };
+            this.checker = new int[4] { 100, -10, 10, 0 };
+            this.text = new string[4] { "1. เอาหน้าใส่กรอบ", "2. ก้มหน้าเล็กน้อย", "3. เงยหน้าเล็กน้อย", "4. มองตรง" };
             this.timeset = 3;
             this.size = new Size(250, 300);
             SetStart();
@@ -121,17 +121,15 @@ namespace Emgu_Dlib_OpenCv
                                 Dlib.DrawRectangle(img, rect, color: new RgbPixel(0, 255, 255), thickness: 4);
                             }
 
-                            CheckFace(pitch, frame, yaw, pitch);
+                            CheckFace(pitch, frame, face, yaw, pitch);
                             frame = img.ToBitmap().ToMat();
-
-                            Cv2.PutText(frame, this.text[step], new Point(face.Right, face.Center.Y), HersheyFonts.HersheySimplex, 1, Scalar.BlueViolet, thickness: 2);
-                            CountDown(face);
                         }
                     }
                 }
-                else
+                else if (this.step > 0)
                 {
                     SetStart();
+                    this.ErrorMsg.Visible = true;
                 }
             }
 
@@ -156,19 +154,23 @@ namespace Emgu_Dlib_OpenCv
             }
             else
             {
-                button1.Text = "Stop";
+                button1.Text = "🙉";
                 this.start = true;
+                this.ErrorMsg.Visible = false;
+                this.SuccessMsg.Visible = false;
             }
         }
 
         private void SetStart()
         {
-            this.button1.Text = "Start";
+            this.button1.Text = "🙈";
             this.start = false;
             this.step = 0;
             this.countdown = 3;
             this.stopwatch = new Stopwatch();
             this.stopwatch.Stop();
+            this.checkedListBox.Items.Clear();
+            this.checkedListBox.Items.AddRange(this.text);
         }
 
         private bool IsFaceInFrame(Rectangle face)
@@ -180,23 +182,24 @@ namespace Emgu_Dlib_OpenCv
             Math.Abs(1 - percent) < 0.5;
         }
 
-        private void CheckFace(double picth, Mat frame, double yaw, double pitch)
+        private void CheckFace(double picth, Mat frame, Rectangle face, double yaw, double pitch)
         {
-            if (countdown == 0)
+            if (this.countdown == 0)
             {
-                TakePhoto(frame);
+                this.picture.Image = frame.ToBitmap();
+                this.SuccessMsg.Visible = true;
+                SetStart();
             }
-            else if (step == checker.Length)
+            else if (this.step == this.checker.Length)
             {
                 this.stopwatch.Start();
-                if (!IsForntFace(yaw, pitch))
-                {
-                    SetStart();
-                }
+                CountDown(face);
+                if (!IsForntFace(yaw, pitch)) SetStart();
             }
-            else if (Math.Abs(checker[step] - picth) <= 5)
+            else if (this.step == 0 && IsFaceInFrame(face) || Math.Abs(this.checker[this.step] - picth) <= 5)
             {
-                step++;
+                checkedListBox.SetItemChecked(this.step, true);
+                this.step++;
             }
         }
 
@@ -204,13 +207,9 @@ namespace Emgu_Dlib_OpenCv
         {
             var time = this.stopwatch.Elapsed.TotalSeconds;
             this.countdown = this.timeset - (int)this.stopwatch.Elapsed.TotalSeconds;
-            if (time > 0) Cv2.PutText(frame, this.countdown.ToString(), new Point(face.Right, face.Center.Y + 30), HersheyFonts.HersheySimplex, 1, Scalar.Red, thickness: 2);
-        }
-
-        private void TakePhoto(Mat frame)
-        {
-            this.picture.Image = frame.ToBitmap();
-            SetStart();
+            checkedListBox.Items.RemoveAt(3);
+            checkedListBox.Items.Insert(3, $"4. มองตรง ({this.countdown} วินาที)");
+            checkedListBox.SetItemChecked(3, true);
         }
 
         private bool IsForntFace(double yaw, double pitch)
