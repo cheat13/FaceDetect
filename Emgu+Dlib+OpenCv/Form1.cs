@@ -51,10 +51,11 @@ namespace Emgu_Dlib_OpenCv
             this.poseModel = new MatOfPoint3d(1, 1, new Point3d(0, 0, 1000));
             this.poseProjection = new MatOfPoint2d();
             this.checker = new int[4] { 100, -10, 10, 0 };
-            this.text = new string[4] { "1. เอาหน้าใส่กรอบ", "2. ก้มหน้าเล็กน้อย", "3. เงยหน้าเล็กน้อย", "4. มองตรง" };
+            this.text = new string[4] { "1. เอาหน้าใส่กรอบ", "2. ก้มหน้าเล็กน้อย", "3. เงยหน้าเล็กน้อย", "4. หน้าตรง" };
             this.timeset = 3;
             this.size = new Size(250, 300);
             SetStart();
+            SetZero();
         }
 
         private void Timer1_Tick(object sender, EventArgs e)
@@ -128,7 +129,7 @@ namespace Emgu_Dlib_OpenCv
                 }
                 else if (this.step > 0)
                 {
-                    SetStart();
+                    SetZero();
                     this.ErrorMsg.Visible = true;
                 }
             }
@@ -151,6 +152,7 @@ namespace Emgu_Dlib_OpenCv
             if (this.start == true)
             {
                 SetStart();
+                SetZero();
             }
             else
             {
@@ -165,21 +167,16 @@ namespace Emgu_Dlib_OpenCv
         {
             this.button1.Text = "🙈";
             this.start = false;
+        }
+
+        private void SetZero()
+        {
             this.step = 0;
             this.countdown = 3;
             this.stopwatch = new Stopwatch();
             this.stopwatch.Stop();
             this.checkedListBox.Items.Clear();
             this.checkedListBox.Items.AddRange(this.text);
-        }
-
-        private bool IsFaceInFrame(Rectangle face)
-        {
-
-            var percent = (double)(face.Area) / (this.size.Width * this.size.Height);
-            return this.rect.Left < face.Center.X && face.Center.X < this.rect.Right &&
-            this.rect.Top < face.Center.Y && face.Center.Y < this.rect.Bottom &&
-            Math.Abs(1 - percent) < 0.5;
         }
 
         private void CheckFace(double picth, Mat frame, Rectangle face, double yaw, double pitch)
@@ -189,12 +186,17 @@ namespace Emgu_Dlib_OpenCv
                 this.picture.Image = frame.ToBitmap();
                 this.SuccessMsg.Visible = true;
                 SetStart();
+                SetZero();
             }
             else if (this.step == this.checker.Length)
             {
                 this.stopwatch.Start();
                 CountDown(face);
-                if (!IsForntFace(yaw, pitch)) SetStart();
+                if (!IsForntFace(yaw, pitch))
+                {
+                    SetZero();
+                    this.ErrorMsg.Visible = true;
+                }
             }
             else if (this.step == 0 && IsFaceInFrame(face) || Math.Abs(this.checker[this.step] - picth) <= 5)
             {
@@ -214,7 +216,20 @@ namespace Emgu_Dlib_OpenCv
 
         private bool IsForntFace(double yaw, double pitch)
         {
-            return Math.Abs(yaw) <= 15 && Math.Abs(pitch) <= 15;
+            return Math.Abs(yaw) <= 25 && Math.Abs(pitch) <= 15;
+        }
+
+        private bool IsFaceInFrame(Rectangle face)
+        {
+            var percent = (double)(face.Area) / (this.size.Width * this.size.Height);
+
+            var isFaceInFrame = this.rect.Left < face.Center.X && face.Center.X < this.rect.Right &&
+            this.rect.Top < face.Center.Y && face.Center.Y < this.rect.Bottom &&
+           -0.5 < percent - 1 && percent - 1 < 1;
+
+            this.ErrorMsg.Visible = !isFaceInFrame;
+
+            return isFaceInFrame;
         }
     }
 }
